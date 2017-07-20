@@ -134,12 +134,20 @@ def block_postprocess_data_parallel(client):
         data_blocks = DataBlocks(new_dictionary, data_halo_blocks)
 
         lview = client.load_balanced_view()
-        result_blocks = lview.map(
+        result_blocks_pos = lview.map(
             lambda d: (
                 wavelet_denoising(d[...], **parameters["wavelet_denoising"])
             ),
             data_blocks
         )
+        result_blocks_neg = lview.map(
+            lambda d: (
+                wavelet_denoising(-(d[...]), **parameters["wavelet_denoising"])
+            ),
+            data_blocks
+        )
+        result_blocks = itertools.chain(result_blocks_pos, result_blocks_neg)
+        len_result_blocks = len(result_blocks_neg) + len(result_blocks_pos)
 
         new_neurons_set = get_empty_neuron(
             shape=new_dictionary.shape[1:], dtype=new_dictionary.dtype
@@ -147,7 +155,7 @@ def block_postprocess_data_parallel(client):
         progress_bar = FloatProgress(min=0.0, max=1.0)
         display(progress_bar)
         for i, each_result_block in enumerate(result_blocks):
-            progress_bar.value = i / float(len(result_blocks))
+            progress_bar.value = i / float(len_result_blocks)
             new_neurons_set = merge_neuron_sets(
                 new_neurons_set,
                 each_result_block[...],
