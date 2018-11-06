@@ -25,7 +25,7 @@ class TestNansheWorkflow(unittest.TestCase):
 
         timeout_opt = (
             "--ExecutePreprocessor.timeout=%s" %
-            os.environ.get("NB_EXE_TIMEOUT", "120")
+            os.environ.get("NB_EXE_TIMEOUT", "180")
         )
 
         for each_nb_filename in nb_filenames:
