@@ -47,6 +47,7 @@ requirements:
     - xnumpy
     - yail
     - zarr
+    - zopfli
 
 about:
   home: {{ data.get("url") }}
