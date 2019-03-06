@@ -17,14 +17,13 @@ from psutil import cpu_count
 import numpy
 import zarr
 
-import distributed
-
 import dask
 import dask.array
+import dask.distributed
 
 try:
     import dask_drmaa
-except (ImportError, RuntimeError):
+except (ImportError, OSError, RuntimeError):
     dask_drmaa = None
 
 from builtins import (
@@ -80,19 +79,8 @@ def cleanup_cluster_files(profile):
             profile(str):           Which iPython profile to clean up for.
     """
 
-    try:
-        # iPython 4.x solution
-        from IPython.paths import locate_profile
-    except ImportError:
-        # iPython 3.x solution
-        from IPython.utils.path import locate_profile
-
-    try:
-        # iPython 3.x solution (use iPython 4.x name)
-        from IPython.utils.path import get_security_file as find_connection_file
-    except ImportError:
-        # iPython 4.x solution
-        from ipykernel.connect import find_connection_file
+    from IPython.paths import locate_profile
+    from ipykernel.connect import find_connection_file
 
     for each_file in ["tasks.db", "tasks.db-journal"]:
         try:
@@ -168,17 +156,19 @@ def startup_distributed(nworkers,
         # Fallback to a local Distributed client instead.
         cluster_kwargs_pass.setdefault("n_workers", nworkers)
         cluster_kwargs_pass.setdefault("threads_per_worker", 1)
-        cluster = distributed.LocalCluster(**cluster_kwargs_pass)
+        cluster = dask.distributed.LocalCluster(**cluster_kwargs_pass)
 
     if adaptive_kwargs is not None:
         cluster.adapt(**adaptive_kwargs)
 
-    client = distributed.Client(cluster, **client_kwargs)
+    client = dask.distributed.Client(cluster, **client_kwargs)
     while (
               (client.status == "running") and
               (len(client.scheduler_info()["workers"]) < nworkers)
           ):
         sleep(1.0)
+
+    dask.config.set({"distributed.dashboard.link": "/proxy/{port}/status"})
 
     return client
 
@@ -187,7 +177,7 @@ def shutdown_distributed(client):
     cluster = client.cluster
 
     # Will close and clear an existing adaptive instance
-    with distributed.utils.ignoring(AttributeError):
+    with dask.distributed.utils.ignoring(AttributeError):
         cluster._adaptive.stop()
         del cluster._adaptive
 
@@ -696,7 +686,7 @@ def block_generate_dictionary_parallel(client, calculate_block_shape, calculate_
                     return(len(self.data_blocks_dict_sample))
 
             def calculate_block(db, dbds, kw):
-                with dask.set_options(get=dask.get):
+                with dask.config.set(scheduler="single-threaded"):
                     return zarr.array(calculate(
                         numpy.asarray(db[...]), numpy.asarray(dbds[...]), *new_args, **kw
                     ))
